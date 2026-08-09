@@ -7,9 +7,9 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly rebuild picks up Debian base-image security updates.
-    # CLI versions are pinned as ARGs; the in-container tool-updater keeps
-    # Claude / Cursor / Pi current at runtime.
+    # Weekly rebuild picks up Debian base-image security updates and the
+    # latest Multica / Claude / Node / Pi releases (resolved at build time).
+    # The in-container tool-updater also refreshes Claude / Cursor / Pi at runtime.
     - cron: '0 7 * * 1'
   workflow_dispatch:
 

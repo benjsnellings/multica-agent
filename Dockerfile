@@ -4,16 +4,6 @@ LABEL org.opencontainers.image.source="https://github.com/benjsnellings/multica-
       org.opencontainers.image.description="Multica daemon with Claude Code, Cursor Agent, and Pi CLIs" \
       org.opencontainers.image.licenses="MIT"
 
-ARG MULTICA_VERSION=0.4.15
-ARG CLAUDE_VERSION=2.1.220
-# Pinned SHA256 for Claude glibc binaries (Cursor Agent also requires glibc).
-ARG CLAUDE_SHA256_X64=674f61f20ff306f3100cf9200e4c36c4b70278b5bef2884549819b942a89c863
-ARG CLAUDE_SHA256_ARM64=159e4a51d796f3bf14677577100f7efb845611b1ceaf0c30cbd8d4650d942185
-# Official Node binary (bookworm apt is Node 18; Pi needs >=22.19 for /v regex).
-ARG NODE_VERSION=22.23.0
-ARG NODE_SHA256_X64=14d7de44f235534799f8b171a4050d9a6a4bc99c87e053a25d3d54afa580aa20
-ARG NODE_SHA256_ARM64=4018815ac1bed4f18208901bbde524fee881253b591ee7bc952660e69bd057af
-
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Build-time HOME=/root so the Cursor installer seeds the image outside /data
@@ -22,8 +12,18 @@ ENV HOME=/root \
     DEBIAN_FRONTEND=noninteractive \
     IS_SANDBOX=1
 
-# Debian/glibc base is required: Cursor Agent's bundled Node needs fcntl64
-# (fails on Alpine/musl). Runtime update-agent-tools keeps the CLIs current.
+# Changing REFRESH invalidates the layer below so a rebuild actually picks up
+# new upstream releases instead of serving a cached layer. The workflow passes
+# the current date.
+ARG REFRESH=unset
+
+# Every component resolves to its latest release at build time. Downloads are
+# still checksum-verified (Node SHASUMS256.txt, Multica checksums.txt, Claude
+# manifest.json) — that guards against corrupt or truncated transfers, not
+# against a compromised upstream, since checksum and artifact share an origin.
+#
+# Debian/glibc base is mandatory: Cursor Agent's bundled Node needs fcntl64 and
+# fails on Alpine/musl.
 RUN \
     apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -41,43 +41,49 @@ RUN \
         xz-utils \
     && rm -rf /var/lib/apt/lists/* \
     \
-    && case "$(dpkg --print-architecture)" in \
-         amd64) \
-           MULTICA_ARCH="amd64" \
-           CLAUDE_PLATFORM="linux-x64" \
-           CLAUDE_SHA256="${CLAUDE_SHA256_X64}" \
-           NODE_ARCH="x64" \
-           NODE_SHA256="${NODE_SHA256_X64}" \
-           ;; \
-         arm64) \
-           MULTICA_ARCH="arm64" \
-           CLAUDE_PLATFORM="linux-arm64" \
-           CLAUDE_SHA256="${CLAUDE_SHA256_ARM64}" \
-           NODE_ARCH="arm64" \
-           NODE_SHA256="${NODE_SHA256_ARM64}" \
-           ;; \
-         *) echo "Unsupported arch: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    && ARCH="$(dpkg --print-architecture)" \
+    && case "${ARCH}" in \
+         amd64) MULTICA_ARCH="amd64"; CLAUDE_PLATFORM="linux-x64";   NODE_ARCH="x64"   ;; \
+         arm64) MULTICA_ARCH="arm64"; CLAUDE_PLATFORM="linux-arm64"; NODE_ARCH="arm64" ;; \
+         *) echo "Unsupported arch: ${ARCH}" >&2; exit 1 ;; \
        esac \
     \
-    && NODE_TGZ="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
-    && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/${NODE_TGZ}" -o "/tmp/${NODE_TGZ}" \
-    && echo "${NODE_SHA256}  /tmp/${NODE_TGZ}" | sha256sum -c - \
+    && NODE_VERSION="$(curl -fsSL https://nodejs.org/dist/index.json \
+         | jq -r '[.[] | select(.lts != false)][0].version')" \
+    && [[ -n "${NODE_VERSION}" && "${NODE_VERSION}" != "null" ]] \
+    && echo "Resolved Node ${NODE_VERSION}" \
+    && NODE_TGZ="node-${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
+    && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/${NODE_TGZ}" -o "/tmp/${NODE_TGZ}" \
+    && curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/SHASUMS256.txt" -o /tmp/SHASUMS256.txt \
+    && (cd /tmp && grep " ${NODE_TGZ}\$" SHASUMS256.txt | sha256sum -c -) \
     && tar -xJf "/tmp/${NODE_TGZ}" -C /usr/local --strip-components=1 \
-    && rm -f "/tmp/${NODE_TGZ}" \
+    && rm -f "/tmp/${NODE_TGZ}" /tmp/SHASUMS256.txt \
     && node --version && npm --version \
     \
+    && MULTICA_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+         https://github.com/multica-ai/multica/releases/latest | sed 's#.*/tag/##')" \
+    && [[ -n "${MULTICA_TAG}" && "${MULTICA_TAG}" == v* ]] \
+    && MULTICA_VERSION="${MULTICA_TAG#v}" \
+    && echo "Resolved Multica ${MULTICA_VERSION}" \
     && MULTICA_TGZ="multica-cli-${MULTICA_VERSION}-linux-${MULTICA_ARCH}.tar.gz" \
     && curl -fsSL \
-         "https://github.com/multica-ai/multica/releases/download/v${MULTICA_VERSION}/checksums.txt" \
+         "https://github.com/multica-ai/multica/releases/download/${MULTICA_TAG}/checksums.txt" \
          -o /tmp/checksums.txt \
     && curl -fsSL \
-         "https://github.com/multica-ai/multica/releases/download/v${MULTICA_VERSION}/${MULTICA_TGZ}" \
+         "https://github.com/multica-ai/multica/releases/download/${MULTICA_TAG}/${MULTICA_TGZ}" \
          -o "/tmp/${MULTICA_TGZ}" \
     && grep " ${MULTICA_TGZ}\$" /tmp/checksums.txt | (cd /tmp && sha256sum -c -) \
     && tar -xzf "/tmp/${MULTICA_TGZ}" -C /tmp \
     && install -m 0755 /tmp/multica /usr/local/bin/multica \
     && rm -rf /tmp/multica "/tmp/${MULTICA_TGZ}" /tmp/checksums.txt \
     \
+    && CLAUDE_VERSION="$(curl -fsSL https://downloads.claude.ai/claude-code-releases/latest)" \
+    && [[ -n "${CLAUDE_VERSION}" ]] \
+    && CLAUDE_SHA256="$(curl -fsSL \
+         "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/manifest.json" \
+         | jq -r --arg p "${CLAUDE_PLATFORM}" '.platforms[$p].checksum // empty')" \
+    && [[ -n "${CLAUDE_SHA256}" ]] \
+    && echo "Resolved Claude Code ${CLAUDE_VERSION}" \
     && curl -fsSL \
          "https://downloads.claude.ai/claude-code-releases/${CLAUDE_VERSION}/${CLAUDE_PLATFORM}/claude" \
          -o /tmp/claude \
@@ -91,10 +97,16 @@ RUN \
     \
     && npm install -g --omit=dev @earendil-works/pi-coding-agent@latest \
     \
-    && multica version \
-    && claude --version \
-    && cursor-agent --version \
-    && pi --version
+    && { \
+         echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+         echo "arch=${ARCH}"; \
+         echo "node=$(node --version)"; \
+         echo "multica=$(multica version 2>/dev/null | head -n1)"; \
+         echo "claude=$(claude --version 2>/dev/null | head -n1)"; \
+         echo "cursor_agent=$(cursor-agent --version 2>/dev/null | head -n1)"; \
+         echo "pi=$(pi --version 2>/dev/null | head -n1)"; \
+       } > /etc/multica-agent-versions \
+    && cat /etc/multica-agent-versions
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY update-agent-tools /usr/local/bin/update-agent-tools

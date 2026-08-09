@@ -68,9 +68,10 @@ All configuration is environment variables — there is no config file.
   it persists.
 - **Exit 78 is a config/auth failure**, not a crash — check the logs rather
   than letting the container restart-loop.
-- **CLI versions are pinned as build ARGs.** The in-container updater pulls
-  newer Claude / Cursor / Pi releases at runtime; bump the ARGs to move the
-  baked-in baseline.
+- **Nothing is version-pinned.** Every component resolves to its latest
+  release at build time; `/etc/multica-agent-versions` inside the image records
+  exactly what landed. Downloads are still checksum-verified. Pin a build by
+  deploying a short-SHA image tag rather than `latest`.
 
 ## Building locally
 

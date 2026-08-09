@@ -104,9 +104,14 @@ write_agent_context
 
 command -v multica >/dev/null || die_config "multica CLI missing from image"
 
+# A version probe must never be able to kill the entrypoint: assign-then-|| so a
+# non-zero substitution is caught under set -e, </dev/null so a CLI that ignores
+# --version cannot block on stdin, and a hard timeout as a backstop.
 for tool in claude cursor-agent pi; do
-  if command -v "${tool}" >/dev/null; then
-    log info "runtime tool present: ${tool} ($(${tool} --version 2>/dev/null | head -1 || echo ok))"
+  if command -v "${tool}" >/dev/null 2>&1; then
+    version="$(timeout 30 "${tool}" --version </dev/null 2>/dev/null | head -n1)" \
+      || version=""
+    log info "runtime tool present: ${tool} (${version:-version probe failed})"
   else
     log warning "runtime tool missing: ${tool}"
   fi
