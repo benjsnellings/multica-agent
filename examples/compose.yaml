@@ -1,0 +1,31 @@
+# Add this service to an existing Multica compose stack, or run it standalone
+# with `docker compose up -d` from this directory.
+services:
+  multica-agent:
+    image: ghcr.io/benjsnellings/multica-agent:latest
+    container_name: multica-agent
+    hostname: multica-agent
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /data
+      MULTICA_TOKEN: ${MULTICA_AGENT_TOKEN}
+      MULTICA_SERVER_URL: ${MULTICA_SERVER_URL}
+      MULTICA_APP_URL: ${MULTICA_APP_URL}
+      MULTICA_DEVICE_NAME: "Docker VM (agent)"
+      # Leave blank so Multica registers claude, cursor-agent and pi as
+      # three separate runtimes rather than collapsing them into one.
+      MULTICA_RUNTIME_NAME: ""
+      MULTICA_WORKSPACE_ID: ""
+      MULTICA_MAX_CONCURRENT_TASKS: 2
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: anthropic/claude-sonnet-4
+      TOOL_UPDATE_INTERVAL_SECONDS: 21600
+      TZ: America/Los_Angeles
+    volumes:
+      - /opt/appdata/multica/agent/data:/data
+      - /opt/appdata/multica/agent/workspace:/workspace
+    mem_limit: 2g
