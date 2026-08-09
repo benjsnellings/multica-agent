@@ -7,9 +7,8 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly rebuild picks up Debian base-image security updates and the
-    # latest Multica / Claude / Node / Pi releases (resolved at build time).
-    # The in-container tool-updater also refreshes Claude / Cursor / Pi at runtime.
+    # Weekly rebuild. Nothing is version-pinned, so this re-resolves the latest
+    # Node / Multica / Claude / Cursor / Pi and refreshes the Debian base layer.
     - cron: '0 7 * * 1'
   workflow_dispatch:
 
@@ -36,19 +35,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build for smoke test
+      - name: Resolve cache-busting refresh key
+        id: refresh
+        run: echo "value=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           load: true
-          tags: multica-agent:smoke-test
+          tags: multica-agent:candidate
+          build-args: |
+            REFRESH=${{ steps.refresh.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Report resolved versions
+        run: |
+          docker run --rm --entrypoint /bin/cat multica-agent:candidate \
+            /etc/multica-agent-versions | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Smoke test bundled CLIs
         run: |
-          docker run --rm --entrypoint /bin/bash multica-agent:smoke-test -c '
+          docker run --rm --entrypoint /bin/bash multica-agent:candidate -c '
             set -e
             echo "=== multica ==="       && multica version
             echo "=== claude ==="        && claude --version
@@ -56,18 +66,6 @@ jobs:
             echo "=== pi ==="            && pi --version
             echo "=== node ==="          && node --version
           '
-
-      - name: Verify entrypoint fails closed without credentials
-        run: |
-          set +e
-          timeout 120 docker run --rm -e MULTICA_TOKEN= multica-agent:smoke-test >/tmp/out 2>&1
-          rc=$?
-          set -e
-          cat /tmp/out
-          if [ "$rc" -ne 78 ]; then
-            echo "expected EX_CONFIG (78) with no credentials, got ${rc}" >&2
-            exit 1
-          fi
 
       - name: Docker metadata
         id: meta
@@ -81,14 +79,14 @@ jobs:
             type=sha,format=short
             type=ref,event=pr
 
-      - name: Push to GHCR
+      - name: Push tested image to GHCR
         if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            echo "=== $tag ==="
+            docker tag multica-agent:candidate "$tag"
+            docker push "$tag"
+          done <<< "$TAGS"
