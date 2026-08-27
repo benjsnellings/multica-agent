@@ -74,6 +74,17 @@ configure_provider_auth() {
   else
     log info "No OPENROUTER_API_KEY — Pi OpenRouter auth not configured"
   fi
+
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    export GH_TOKEN="${GITHUB_TOKEN}"
+    if gh auth setup-git >/dev/null 2>&1; then
+      log info "GITHUB_TOKEN set; gh configured as git credential helper"
+    else
+      log warning "GITHUB_TOKEN set but 'gh auth setup-git' failed"
+    fi
+  else
+    log info "No GITHUB_TOKEN — git/gh will not authenticate to GitHub"
+  fi
 }
 
 write_agent_context() {

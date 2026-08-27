@@ -91,6 +91,23 @@ RUN \
     && install -m 0755 /tmp/claude /usr/local/bin/claude \
     && rm -f /tmp/claude \
     \
+    && GH_TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+         https://github.com/cli/cli/releases/latest | sed 's#.*/tag/##')" \
+    && [[ -n "${GH_TAG}" && "${GH_TAG}" == v* ]] \
+    && GH_VERSION="${GH_TAG#v}" \
+    && echo "Resolved gh ${GH_VERSION}" \
+    && GH_TGZ="gh_${GH_VERSION}_linux_${ARCH}.tar.gz" \
+    && curl -fsSL \
+         "https://github.com/cli/cli/releases/download/${GH_TAG}/gh_${GH_VERSION}_checksums.txt" \
+         -o /tmp/gh_checksums.txt \
+    && curl -fsSL \
+         "https://github.com/cli/cli/releases/download/${GH_TAG}/${GH_TGZ}" \
+         -o "/tmp/${GH_TGZ}" \
+    && grep " ${GH_TGZ}\$" /tmp/gh_checksums.txt | (cd /tmp && sha256sum -c -) \
+    && tar -xzf "/tmp/${GH_TGZ}" -C /tmp \
+    && install -m 0755 "/tmp/gh_${GH_VERSION}_linux_${ARCH}/bin/gh" /usr/local/bin/gh \
+    && rm -rf "/tmp/gh_${GH_VERSION}_linux_${ARCH}" "/tmp/${GH_TGZ}" /tmp/gh_checksums.txt \
+    \
     && curl -fsS https://cursor.com/install | bash \
     && ln -sfn /root/.local/bin/cursor-agent /usr/local/bin/cursor-agent \
     && ln -sfn /root/.local/bin/agent /usr/local/bin/agent \
@@ -105,6 +122,7 @@ RUN \
          echo "claude=$(claude --version 2>/dev/null | head -n1)"; \
          echo "cursor_agent=$(cursor-agent --version 2>/dev/null | head -n1)"; \
          echo "pi=$(pi --version 2>/dev/null | head -n1)"; \
+         echo "gh=$(gh --version 2>/dev/null | head -n1)"; \
        } > /etc/multica-agent-versions \
     && cat /etc/multica-agent-versions
 

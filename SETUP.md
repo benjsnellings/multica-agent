@@ -50,7 +50,19 @@ An OpenRouter key from <https://openrouter.ai/keys>.
 A personal access token from **Settings → API Tokens** in your Multica
 instance.
 
-Park all four somewhere safe for Step 5.
+### 1e. GitHub (optional)
+
+A **fine-grained personal access token** (Settings → Developer settings →
+Personal access tokens → Fine-grained tokens) with:
+
+- Contents: Read and write
+- Issues: Read and write
+- Pull requests: Read and write
+
+Metadata: Read is included automatically. Skip this if the agents don't
+need GitHub access.
+
+Park all five somewhere safe for Step 5.
 
 ---
 
@@ -119,7 +131,7 @@ echo "=== image pull ==="
 docker pull ghcr.io/benjsnellings/multica-agent:latest
 echo "=== CLI versions in image ==="
 docker run --rm --entrypoint /bin/bash ghcr.io/benjsnellings/multica-agent:latest \
-  -c 'multica version; claude --version; cursor-agent --version; pi --version'
+  -c 'multica version; claude --version; cursor-agent --version; pi --version; gh --version'
 echo "=== multica server health ==="
 curl -fsS https://multica.home.bensnellings.com/health && echo " <- OK"
 ```
@@ -158,6 +170,7 @@ the `services:` block:
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: anthropic/claude-sonnet-4
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       TOOL_UPDATE_INTERVAL_SECONDS: 21600
       TZ: America/Los_Angeles
     volumes:
@@ -180,6 +193,7 @@ CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ANTHROPIC_API_KEY=
 CURSOR_API_KEY=<cursor user api key>
 OPENROUTER_API_KEY=<openrouter key>
+GITHUB_TOKEN=<github fine-grained pat, optional>
 ```
 
 Lock it down — Dockge renders `.env` in its web editor, so anyone who can

@@ -64,6 +64,7 @@ jobs:
             echo "=== claude ==="        && claude --version
             echo "=== cursor-agent ===" && cursor-agent --version
             echo "=== pi ==="            && pi --version
+            echo "=== gh ==="            && gh --version
             echo "=== node ==="          && node --version
           '
 
