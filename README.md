@@ -43,9 +43,33 @@ All configuration is environment variables — there is no config file.
 | `CURSOR_API_KEY` | — | Cursor Agent plan auth. |
 | `OPENROUTER_API_KEY` | — | Pi auth; written to `/data/.pi/agent/auth.json`. |
 | `OPENROUTER_MODEL` | `anthropic/claude-sonnet-4` | Pi default model. |
+| `GITHUB_TOKEN` | — | Fine-grained PAT. Configures `gh` (and git, via `gh auth setup-git`) for clone/pull/push and issues/PR access. See "GitHub access" below. |
 | `TOOL_UPDATES` | `true` | Set `false` to disable the background CLI updater. |
 | `TOOL_UPDATE_INTERVAL_SECONDS` | `21600` | Updater interval (6h). |
 | `TOOL_UPDATE_BOOT_DELAY_SECONDS` | `30` | Delay before the first update run. |
+
+## GitHub access
+
+Set `GITHUB_TOKEN` to a **fine-grained personal access token** with:
+
+| Permission | Level |
+|---|---|
+| Contents | Read and write |
+| Issues | Read and write |
+| Pull requests | Read and write |
+| Metadata | Read (mandatory) |
+
+The entrypoint exports it as `GH_TOKEN` and runs `gh auth setup-git`, which
+wires `gh` up as git's credential helper for `github.com` — both `git`
+(clone/pull/push) and `gh` (issues, PRs) authenticate from the same token.
+Nothing is written to disk in plaintext; the token is resolved from the env
+var on every call.
+
+**This does not prevent the token from merging PRs.** Fine-grained tokens
+have no separate "merge" permission — `Pull requests: write` technically
+permits it. To actually block merges, enable branch protection on the
+target repo requiring at least one approving review; GitHub enforces that
+regardless of what the token's API access allows.
 
 ## Volumes
 

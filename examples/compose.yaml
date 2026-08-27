@@ -23,6 +23,7 @@ services:
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: anthropic/claude-sonnet-4
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       TOOL_UPDATE_INTERVAL_SECONDS: 21600
       TZ: America/Los_Angeles
     volumes:
